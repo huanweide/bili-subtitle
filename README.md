@@ -1,41 +1,38 @@
 ﻿# B站字幕一键提取 · 篡改猴插件
 
-打开B站视频 → 点一下粉色按钮 → 自动出SRT字幕文件。
+打开B站视频 → 点一下粉色按钮 → 字幕文字直接复制。
 
-**有官方字幕**: 秒下  
-**无字幕**: 自动下载音频 → AI语音识别 → 生成SRT
+## 安装
 
-## 安装（30秒）
-
-1. Edge 浏览器安装 [Tampermonkey](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)
-2. 打开 `bili-subtitle.user.js` → 全选复制
-3. Tampermonkey 图标 → 创建新脚本 → 粘贴 → `Ctrl+S` 保存
-4. 打开任意B站视频，右下角出现 🎬 按钮
+1. Edge 装 [Tampermonkey](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)
+2. 点此安装脚本 → [bili-subtitle.user.js](https://github.com/huanweide/bili-subtitle/raw/main/bili-subtitle.user.js)
+3. Tampermonkey 会自动弹出安装页面 → 点「安装」
 
 ## 使用
 
-| 场景 | 操作 |
+打开任意B站视频页，右下角出现 🎬 按钮：
+
+| 场景 | 显示 |
 |------|------|
-| 有官方字幕 | 点 🎬 → 直接下载 SRT |
-| 无字幕 | 点 🎬 → 首次提示输入 API Key → 自动下载音频 → AI听写 → 出SRT |
+| 查询中 | `⏳ 查询中...` |
+| 有字幕 | `✅ 成功 · 1234字` → 出现 📋 一键复制 |
+| 无字幕 | `⚠️ 该视频无字幕` |
+| 失败 | `❌ 提取失败` |
 
-**API Key 获取（免费）：**
-[cloud.siliconflow.cn](https://cloud.siliconflow.cn/) → 注册 → API密钥 → 新建 → 复制 `sk-xxx` → 粘贴到插件弹窗
+点「📋 一键复制」→ 全部字幕文字到剪贴板。
 
-免费额度：100小时/月，够用。
+换视频自动重置。
 
 ## 原理
 
 ```
-B站API → 查字幕 → 有 → 直接下SRT
-                → 无 → DASH音频 → SiliconFlow SenseVoice → 分段 → SRT
+B站API → 查cid → 查字幕 → 有 → 下载JSON字幕 → 提取纯文本 → 复制
+                      → 无 → 提示"无字幕"
 ```
-
-全程在浏览器内完成，不经过任何第三方服务器。API Key 存在浏览器本地，不上传。
 
 ## 文件
 
 | 文件 | 说明 |
 |------|------|
-| `bili-subtitle.user.js` | 篡改猴插件（主文件，全功能） |
-| `bili-asr.py` | Python命令行版（备用，超大视频用） |
+| `bili-subtitle.user.js` | 篡改猴插件（安装这个就行） |
+| `bili-asr.py` | Python命令行版（备用，音频转字幕） |
