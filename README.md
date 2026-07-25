@@ -42,3 +42,6 @@ B站API → 查cid → 查字幕 → 有 → 下载JSON字幕 → 提取纯文�
 |------|------|
 | `bili-subtitle.user.js` | 篡改猴插件（安装这个就行） |
 | `bili-asr.py` | Python命令行版（备用，音频转字幕） |
+## 项目合并说明
+
+本仓库已合并并取代 [`bili-subtitle-extractor`](https://github.com/huanweide/bili-subtitle-extractor)（该仓库已归档）。后续维护统一在此进行。
