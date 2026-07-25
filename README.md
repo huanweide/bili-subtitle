@@ -1,3 +1,9 @@
+<!-- badges -->
+[![License](https://img.shields.io/github/license/huanweide/bili-subtitle)](LICENSE)
+[![CI](https://github.com/huanweide/bili-subtitle/actions/workflows/ci.yml/badge.svg)](https://github.com/huanweide/bili-subtitle/actions/workflows/ci.yml)
+[![Stars](https://img.shields.io/github/stars/huanweide/bili-subtitle)](https://github.com/huanweide/bili-subtitle/stargazers)
+<!-- /badges -->
+
 ﻿# B站字幕一键提取 · 篡改猴插件
 
 打开B站视频 → 点一下粉色按钮 → 字幕文字直接复制。
