@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         B站字幕一键提取 · 极速版
 // @namespace    https://github.com/huanweide/bili-subtitle
-// @version      6.0
-// @description  打开B站视频 → 点一下 → 秒级获取字幕（智能选中文源）→ 复制 / 下载 TXT·SRT。API 直取，无需 Cookie，纯本地运行。
+// @version      6.1
+// @description  打开B站视频 → 点一下 → 秒级提取字幕（自动选中文）→ 复制 / 下载 TXT·SRT。没有字幕也能一键复制视频标题与简介。无需登录，纯本地运行。
 // @author       阿梓
 // @icon         https://www.bilibili.com/favicon.ico
 // @include      /^https?:\/\/(www\.)?bilibili\.com\/video\/BV\w+/
@@ -28,7 +28,8 @@
     body: null,      // 当前字幕 body 数组（带 from/to/content）
     lan: '',         // 当前选中语言
     loading: false,
-    err: ''
+    err: '',
+    noSub: false     // 该视频确认无字幕
   };
   var cache = {};    // key: `${bvid||aid}_${cid}_${lan}` -> body 数组
 
@@ -84,6 +85,18 @@
   function getPageState() {
     try { return window.__INITIAL_STATE__ || {}; } catch (e) { return {}; }
   }
+  // 无字幕时的可复制纯文本：标题 + UP主 + 简介（取自页面初始状态）
+  function getVideoInfoText() {
+    var st = getPageState();
+    var title = state.title || (st.videoData && st.videoData.title) || document.title || '';
+    var up = ''; var desc = '';
+    try { up = (st.videoData && st.videoData.owner && st.videoData.owner.name) || ''; } catch (e) {}
+    try { desc = (st.videoData && st.videoData.desc) || ''; } catch (e) {}
+    var lines = ['【标题】' + (title || '未知')];
+    if (up) lines.push('【UP主】' + up);
+    if (desc) lines.push('【简介】' + desc);
+    return lines.join('\n');
+  }
 
   // ===================== 字幕管线 =====================
   async function resolveVideo() {
@@ -123,12 +136,45 @@
     var qs = (state.bvid ? 'bvid=' + state.bvid : 'aid=' + state.aid) + '&cid=' + state.cid;
     var d = JSON.parse(await gx('https://api.bilibili.com/x/player/v2?' + qs, 10000));
     if (d.code === 0 && d.data && d.data.subtitle && d.data.subtitle.subtitles) {
-      state.subs = d.data.subtitle.subtitles.map(function (s) {
-        return { lan: s.lan, lan_doc: s.lan_doc, url: s.subtitle_url.indexOf('http') === 0 ? s.subtitle_url : 'https:' + s.subtitle_url };
+      // 按语言分组：长视频的 AI 字幕可能被拆成同一 lan 的多个 subtitle_url 片段
+      var byLan = {};
+      d.data.subtitle.subtitles.forEach(function (s) {
+        var url = s.subtitle_url.indexOf('http') === 0 ? s.subtitle_url : 'https:' + s.subtitle_url;
+        if (!byLan[s.lan]) byLan[s.lan] = { lan: s.lan, lan_doc: s.lan_doc, urls: [] };
+        byLan[s.lan].urls.push(url);
       });
+      state.subs = Object.keys(byLan).map(function (k) { return byLan[k]; });
       return state.subs;
     }
     return [];
+  }
+
+  // 合并多个字幕片段：展开 -> 按 from 排序 -> 去重（相同 from+content 视为重复）
+  function mergeBodies(parts) {
+    var all = [];
+    parts.forEach(function (b) { if (b && b.body && b.body.length) all = all.concat(b.body); });
+    all.sort(function (a, b) { return (a.from || 0) - (b.from || 0); });
+    var seen = {}, out = [];
+    all.forEach(function (x) {
+      var k = (x.from || 0) + '|' + (x.content || '');
+      if (!seen[k]) { seen[k] = 1; out.push(x); }
+    });
+    return out;
+  }
+  // 从页面初始状态取视频总时长（秒），用于完整性自检
+  function getVideoDuration() {
+    var st = getPageState();
+    try {
+      if (st.videoData && st.videoData.duration) return Number(st.videoData.duration) || 0;
+      if (st.epInfo && st.epInfo.duration) return Number(st.epInfo.duration) || 0;
+    } catch (e) {}
+    return 0;
+  }
+  // 完整性自检：若末句结束时间远小于视频时长，疑似截断
+  function checkIntegrity(body, duration) {
+    if (!body || !body.length || !duration) return false;
+    var lastTo = body[body.length - 1].to || 0;
+    return lastTo < duration * 0.9; // 覆盖不到视频 90% -> 提示可能不完整
   }
 
   async function fetchBody(lan) {
@@ -136,18 +182,27 @@
     if (cache[key]) { state.body = cache[key]; state.lan = lan; return state.body; }
     var sub = state.subs.filter(function (s) { return s.lan === lan; })[0];
     if (!sub) throw new Error('未找到该语言字幕');
-    var d = JSON.parse(await gx(sub.url, 15000));
-    if (!d.body) throw new Error('字幕内容为空');
-    state.body = d.body; state.lan = lan;
-    cache[key] = d.body;
-    return state.body;
+    // 下载该语言下的全部片段（长视频可能有多段），单段超时放宽到 30s
+    var parts = [];
+    for (var i = 0; i < sub.urls.length; i++) {
+      var d = JSON.parse(await gx(sub.urls[i], 30000));
+      parts.push(d);
+    }
+    if (!parts.length) throw new Error('字幕内容为空');
+    var merged = mergeBodies(parts);
+    if (!merged.length) throw new Error('字幕内容为空');
+    // 完整性自检：末句远早于视频总长，则打标记供 UI 提示
+    merged.incomplete = checkIntegrity(merged, getVideoDuration());
+    state.body = merged; state.lan = lan;
+    cache[key] = merged;
+    return merged;
   }
 
   async function getSubtitles() {
     state.loading = true; state.err = ''; render();
     try {
       if (!state.cid) { if (!await resolveVideo()) throw new Error('无法获取视频 cid'); }
-      if (!state.subs.length) { var list = await fetchSubList(); if (!list.length) { state.err = '该视频暂无字幕（AI 或 CC 均无）'; state.loading = false; render(); return; } }
+      if (!state.subs.length) { var list = await fetchSubList(); if (!list.length) { state.err = ''; state.noSub = true; state.loading = false; render(); return; } }
       var lan = pickLanguage(state.subs);
       await fetchBody(lan);
       state.loading = false; render();
@@ -239,10 +294,11 @@
       '<div id="bsr-toast"></div>';
     document.body.appendChild(root);
 
-    root.querySelector('#bsr-fab').onclick = function () { root.querySelector('#bsr-panel').classList.toggle('show'); if (root.querySelector('#bsr-panel').classList.contains('show') && !state.body && !state.loading && !state.err) getSubtitles(); };
+    root.querySelector('#bsr-fab').onclick = function () { var show = root.querySelector('#bsr-panel').classList.toggle('show'); if (show && !state.body && !state.loading && !state.noSub && !state.err) getSubtitles(); };
     root.querySelector('#bsrClose').onclick = function () { root.querySelector('#bsr-panel').classList.remove('show'); };
     root.querySelector('#bsrGet').onclick = getSubtitles;
-    root.querySelector('#bsrCopy').onclick = function () { copyText(state.body ? bodyToTxt(state.body) : ''); };
+    // 复制按钮始终可用：有字幕复制字幕，无字幕复制视频信息纯文本
+    root.querySelector('#bsrCopy').onclick = function () { copyText(state.body ? bodyToTxt(state.body) : getVideoInfoText()); };
     root.querySelector('#bsrTxt').onclick = function () { if (state.body) download(safeName(state.title) + '_' + state.lan + '.txt', bodyToTxt(state.body)); };
     root.querySelector('#bsrSrt').onclick = function () { if (state.body) download(safeName(state.title) + '_' + state.lan + '.srt', bodyToSrt(state.body), 'text/plain;charset=utf-8'); };
     root.querySelector('#bsrLan').onchange = function (e) { switchLan(e.target.value); };
@@ -258,16 +314,21 @@
     var st = $('#bsrStatus');
     if (state.err) st.textContent = '⚠️ ' + state.err;
     else if (state.loading) st.textContent = '正在拉取字幕...';
-    else if (state.body) st.textContent = '✅ ' + state.body.length + ' 句 · ' + (state.lan || '') + ' · ' + bodyToTxt(state.body).replace(/\s/g, '').length + ' 字';
-    else st.textContent = '';
-    $('#bsrOut').value = state.body ? bodyToTxt(state.body) : '';
+    else if (state.noSub) st.textContent = 'ℹ️ 本视频无字幕（已为你准备视频信息，点击复制即可）';
+    else if (state.body) {
+      var warn = state.body.incomplete ? ' ⚠️ 字幕可能不完整' : '';
+      st.textContent = '✅ ' + state.body.length + ' 句 · ' + (state.lan || '') + ' · ' + bodyToTxt(state.body).replace(/\s/g, '').length + ' 字' + warn;
+    } else st.textContent = '';
+    // 文本框：有字幕显字幕，无字幕显视频信息（可直接复制）
+    $('#bsrOut').value = state.body ? bodyToTxt(state.body) : (state.noSub ? getVideoInfoText() : '');
     // 语言下拉
     var lanRow = $('#bsrLanRow'), sel = $('#bsrLan');
     if (state.subs.length) {
       lanRow.style.display = 'flex';
-      sel.innerHTML = state.subs.map(function (s) { return '<option value="' + s.lan + '"' + (s.lan === state.lan ? ' selected' : '') + '>' + (s.lan_doc || s.lan) + ' (' + s.lan + ')</option>'; }).join('');
+      sel.innerHTML = state.subs.map(function (s) { return '<option value="' + s.lan + '"' + (s.lan === state.lan ? ' selected' : '') + '>' + (s.lan_doc || s.lan) + ' (' + s.lan + ')' + (s.urls.length > 1 ? ' ×' + s.urls.length + '段' : '') + '</option>'; }).join('');
     } else lanRow.style.display = 'none';
-    $('#bsrOps').style.display = state.body ? 'flex' : 'none';
+    // 复制按钮始终可用；TXT/SRT 仅在有字幕时有效（点击时已做保护）
+    $('#bsrOps').style.display = 'flex';
   }
 
   var toastTimer = null;
@@ -281,7 +342,7 @@
 
   // ===================== 启动 / 视频切换检测 =====================
   function resetForNewVideo() {
-    state.cid = null; state.subs = []; state.body = null; state.lan = ''; state.err = ''; state.loading = false;
+    state.cid = null; state.subs = []; state.body = null; state.lan = ''; state.err = ''; state.noSub = false; state.loading = false;
     var st = getPageState();
     state.bvid = ''; state.aid = ''; state.title = '';
     try {
