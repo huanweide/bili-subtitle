@@ -18,11 +18,17 @@ import re
 import argparse
 import http.server
 import urllib.parse
+from aoa import wrap_http, get_breaker, CircuitOpenError
 
 # ========== 配置 ==========
 SILICONFLOW_KEY = os.environ.get("SILICONFLOW_API_KEY", "")
 ASR_API = "https://api.siliconflow.cn/v1/audio/transcriptions"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+# ========== AOA 防护（超时/熔断，单线程 server 防挂死） ==========
+SUB_BREAKER = get_breaker("subtitle", 3, 30)   # 字幕抓取熔断
+ASR_BREAKER = get_breaker("asr", 3, 60)         # ASR 接口熔断
+DL_BREAKER = get_breaker("download", 3, 60)     # 音频下载熔断
 
 # ========== B站API ==========
 def get_video_info(bvid, cid=None):
@@ -72,7 +78,7 @@ def download_audio(audio_url, output_path):
     }
 
     print(f"  下载中...")
-    resp = requests.get(audio_url, headers=headers, stream=True, timeout=300)
+    resp = wrap_http("download", requests.get, DL_BREAKER, audio_url, headers=headers, stream=True, timeout=300)
     total = int(resp.headers.get("content-length", 0))
 
     downloaded = 0
@@ -100,8 +106,8 @@ def asr_transcribe(audio_path):
         print("  建议: 使用 yt-dlp -f worstaudio 获取更小文件")
 
     with open(audio_path, "rb") as f:
-        resp = requests.post(
-            ASR_API,
+        resp = wrap_http(
+            "asr", requests.post, ASR_BREAKER, ASR_API,
             headers={"Authorization": f"Bearer {SILICONFLOW_KEY}"},
             files={"file": ("audio.m4a", f, "audio/mp4")},
             data={"model": "FunAudioLLM/SenseVoiceSmall", "response_format": "json"},
@@ -167,7 +173,7 @@ def process_video(bvid, cid):
                 sub_url = "https:" + sub_url
             print(f"✅ 找到官方字幕！正在下载...")
             import requests
-            sub_data = requests.get(sub_url, headers={"Referer":"https://www.bilibili.com/"}).json()
+            sub_data = wrap_http("subtitle", requests.get, SUB_BREAKER, sub_url, headers={"Referer":"https://www.bilibili.com/"}, timeout=15).json()
             srt = segments_to_srt(sub_data["body"])
             out = f"{bvid}_sub.srt"
             with open(out, "w", encoding="utf-8") as f:
@@ -237,7 +243,7 @@ class ASRHandler(http.server.BaseHTTPRequestHandler):
                         sub_url = subtitle["subtitles"][0]["subtitle_url"]
                         if not sub_url.startswith("http"):
                             sub_url = "https:" + sub_url
-                        sub_data = requests.get(sub_url, headers={"Referer":"https://www.bilibili.com/"}).json()
+                        sub_data = wrap_http("subtitle", requests.get, SUB_BREAKER, sub_url, headers={"Referer":"https://www.bilibili.com/"}, timeout=15).json()
                         resp = {"success": True, "segments": sub_data["body"], "source": "official"}
                         self.wfile.write(json.dumps(resp, ensure_ascii=False).encode())
                         return

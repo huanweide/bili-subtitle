@@ -74,17 +74,40 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  // ===================== 网络（GM_xmlhttpRequest 包 Promise） =====================
+  // ===================== 网络（GM_xmlhttpRequest 包 Promise）+ AOA 防护 =====================
+  // AOA：缓存（同 url 5min 内直接返回，避免重复抓取）+ 熔断（连续失败快速失败，防故障级联）
+  var __gxCache = {};                       // url -> { t: 时间戳, text: 响应 }
+  var __gxFailures = 0, __gxOpenedAt = 0;
+  var __GX_THRESHOLD = 3, __GX_RESET = 30000, __GX_CACHE_TTL = 300000;
+  function __gxBreakerOpen() {
+    if (__gxOpenedAt === 0) return false;
+    if (Date.now() - __gxOpenedAt >= __GX_RESET) { __gxFailures = 0; __gxOpenedAt = 0; return false; }
+    return true;
+  }
   function gx(url, timeout) {
+    var hit = __gxCache[url];
+    if (hit && (Date.now() - hit.t) < __GX_CACHE_TTL) return Promise.resolve(hit.text);
+    if (__gxBreakerOpen()) return Promise.reject(new Error('字幕接口熔断中，请稍后再试'));
     return new Promise(function (resolve, reject) {
       GM_xmlhttpRequest({
         method: 'GET', url: url,
         headers: { 'Referer': 'https://www.bilibili.com/' },
         onload: function (r) {
-          if (r.status >= 200 && r.status < 300) resolve(r.responseText);
-          else reject(new Error('HTTP ' + r.status));
+          if (r.status >= 200 && r.status < 300) {
+            __gxFailures = 0;
+            __gxCache[url] = { t: Date.now(), text: r.responseText };
+            resolve(r.responseText);
+          } else {
+            __gxFailures++;
+            if (__gxFailures >= __GX_THRESHOLD) __gxOpenedAt = Date.now();
+            reject(new Error('HTTP ' + r.status));
+          }
         },
-        onerror: function () { reject(new Error('network error')); },
+        onerror: function () {
+          __gxFailures++;
+          if (__gxFailures >= __GX_THRESHOLD) __gxOpenedAt = Date.now();
+          reject(new Error('network error'));
+        },
         timeout: timeout || 10000
       });
     });
