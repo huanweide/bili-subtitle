@@ -12,6 +12,7 @@
 // @connect      api.bilibili.com
 // @connect      hdslb.com
 // @connect      aisubtitle.hdslb.com
+// @connect      subtitle.bilibili.com  // 字幕正文接口域名，脚本需连接此域名方可拉取字幕
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -185,7 +186,14 @@
     // 下载该语言下的全部片段（长视频可能有多段），单段超时放宽到 30s
     var parts = [];
     for (var i = 0; i < sub.urls.length; i++) {
-      var d = JSON.parse(await gx(sub.urls[i], 30000));
+      var raw = await gx(sub.urls[i], 30000);
+      var d;
+      // 接口可能返回非 JSON（如 HTML 错误页/CORS 拦截页），解析前校验并给出明确提示，避免整脚本崩溃
+      try {
+        d = JSON.parse(raw);
+      } catch (e) {
+        throw new Error('字幕接口返回非 JSON，可能请求被拦截或网络异常：' + e.message);
+      }
       parts.push(d);
     }
     if (!parts.length) throw new Error('字幕内容为空');
@@ -354,7 +362,7 @@
 
   function boot() {
     buildUI();
-    resolveVideo().then(render);
+    resolveVideo().then(render).catch(function (err) { log('视频解析失败：', err); });
     var last = location.href;
     setInterval(function () {
       if (location.href !== last) { last = location.href; setTimeout(resetForNewVideo, 800); }
