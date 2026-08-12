@@ -67,6 +67,12 @@
     return out.join('\n') + '\n';
   }
   function safeName(s) { return (s || 'bilibili').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60); }
+  // HTML 转义：防止字幕语言字段（lan / lan_doc）注入异常/劫持响应
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
 
   // ===================== 网络（GM_xmlhttpRequest 包 Promise） =====================
   function gx(url, timeout) {
@@ -333,7 +339,10 @@
     var lanRow = $('#bsrLanRow'), sel = $('#bsrLan');
     if (state.subs.length) {
       lanRow.style.display = 'flex';
-      sel.innerHTML = state.subs.map(function (s) { return '<option value="' + s.lan + '"' + (s.lan === state.lan ? ' selected' : '') + '>' + (s.lan_doc || s.lan) + ' (' + s.lan + ')' + (s.urls.length > 1 ? ' ×' + s.urls.length + '段' : '') + '</option>'; }).join('');
+      sel.innerHTML = state.subs.map(function (s) {
+        var lan = esc(s.lan), lanDoc = esc(s.lan_doc || s.lan);
+        return '<option value="' + lan + '"' + (s.lan === state.lan ? ' selected' : '') + '>' + lanDoc + ' (' + lan + ')' + (s.urls.length > 1 ? ' ×' + s.urls.length + '段' : '') + '</option>';
+      }).join('');
     } else lanRow.style.display = 'none';
     // 复制按钮始终可用；TXT/SRT 仅在有字幕时有效（点击时已做保护）
     $('#bsrOps').style.display = 'flex';
