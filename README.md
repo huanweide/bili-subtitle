@@ -6,6 +6,8 @@
 
 # B站字幕一键提取 · 篡改猴插件（极速版 v6.1）
 
+> 姊妹项目：本插件是「浏览器一键提取」形态（零配置、无需 API Key）。如果你需要**命令行批量下载**，或在**无字幕时用 AI 语音转文字**生成字幕，请用 [bili-subtitle-extractor](https://github.com/huanweide/bili-subtitle-extractor)（纯 Python 命令行版）。
+
 打开 B站视频 → 点一下 🎬 → 秒级获取字幕 → 一键复制 / 下载 TXT·SRT。没有字幕也能一键复制视频标题与简介。
 
 ## 特性
