@@ -7,10 +7,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.x"
-      - name: Syntax check
-        run: python -m compileall -q . || true
+          node-version: "22"
+      - name: Syntax check (userscript)
+        run: node --check bili-subtitle.user.js
+      - name: Unit tests (logic)
+        run: node test_logic.js
       - name: Lint (informational)
-        run: pip install ruff >/dev/null 2>&1; ruff check . || true
+        # ruff lint is informational; this is a JS repo so Python lint is best-effort only
+        continue-on-error: true
+        run: pip install ruff >/dev/null 2>&1; ruff check .
