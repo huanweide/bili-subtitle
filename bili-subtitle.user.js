@@ -189,14 +189,14 @@
     if (cache[key]) { state.body = cache[key]; state.lan = lan; return state.body; }
     var sub = state.subs.filter(function (s) { return s.lan === lan; })[0];
     if (!sub) throw new Error('未找到该语言字幕');
-    // 下载该语言下的全部片段（长视频可能有多段），单段超时放宽到 30s
+    // 下载该语言下的全部片段（长视频可能有多段），并行拉取以缩短总耗时，单段超时放宽到 30s
+    var raws = await Promise.all(sub.urls.map(function (u) { return gx(u, 30000); }));
     var parts = [];
-    for (var i = 0; i < sub.urls.length; i++) {
-      var raw = await gx(sub.urls[i], 30000);
+    for (var i = 0; i < raws.length; i++) {
       var d;
       // 接口可能返回非 JSON（如 HTML 错误页/CORS 拦截页），解析前校验并给出明确提示，避免整脚本崩溃
       try {
-        d = JSON.parse(raw);
+        d = JSON.parse(raws[i]);
       } catch (e) {
         throw new Error('字幕接口返回非 JSON，可能请求被拦截或网络异常：' + e.message);
       }
@@ -321,6 +321,9 @@
   function render() {
     if (!root) return;
     var $ = function (id) { return root.querySelector(id); };
+    // 顶部统一计算字幕文本与字数，后续复用，避免长字幕下每帧重复 O(n) 拼接
+    var txt = state.body ? bodyToTxt(state.body) : '';
+    var charCount = txt.replace(/\s/g, '').length;
     $('#bsrTitle').textContent = state.title || '—';
     var btn = $('#bsrGet');
     if (state.loading) { btn.disabled = true; btn.textContent = '⏳ 获取中...'; }
@@ -331,10 +334,10 @@
     else if (state.noSub) st.textContent = 'ℹ️ 本视频无字幕（已为你准备视频信息，点击复制即可）';
     else if (state.body) {
       var warn = state.body.incomplete ? ' ⚠️ 字幕可能不完整' : '';
-      st.textContent = '✅ ' + state.body.length + ' 句 · ' + (state.lan || '') + ' · ' + bodyToTxt(state.body).replace(/\s/g, '').length + ' 字' + warn;
+      st.textContent = '✅ ' + state.body.length + ' 句 · ' + (state.lan || '') + ' · ' + charCount + ' 字' + warn;
     } else st.textContent = '';
     // 文本框：有字幕显字幕，无字幕显视频信息（可直接复制）
-    $('#bsrOut').value = state.body ? bodyToTxt(state.body) : (state.noSub ? getVideoInfoText() : '');
+    $('#bsrOut').value = state.body ? txt : (state.noSub ? getVideoInfoText() : '');
     // 语言下拉
     var lanRow = $('#bsrLanRow'), sel = $('#bsrLan');
     if (state.subs.length) {
