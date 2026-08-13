@@ -52,10 +52,10 @@ def get_dash_audio(bvid, cid):
     }
     resp = requests.get(url, headers=headers, timeout=15)
     data = resp.json()
-    if data["code"] != 0:
+    if data.get("code") != 0:
         raise Exception(f"获取播放地址失败: {data.get('message','未知错误')}")
 
-    dash = data["data"].get("dash")
+    dash = (data.get("data") or {}).get("dash")
     if not dash:
         raise Exception("该视频不支持DASH格式")
 
@@ -165,7 +165,7 @@ def process_video(bvid, cid):
     # 1. 检查是否有官方字幕
     print("🔍 查询字幕...")
     info = get_video_info(bvid, cid)
-    if info["code"] == 0:
+    if info.get("code") == 0 and info.get("data"):
         subtitle = info["data"].get("subtitle")
         if subtitle and subtitle.get("subtitles"):
             sub_url = subtitle["subtitles"][0]["subtitle_url"]
@@ -236,7 +236,7 @@ class ASRHandler(http.server.BaseHTTPRequestHandler):
 
             try:
                 info = get_video_info(bvid, cid)
-                if info["code"] == 0:
+                if info.get("code") == 0 and info.get("data"):
                     subtitle = info["data"].get("subtitle")
                     if subtitle and subtitle.get("subtitles"):
                         import requests

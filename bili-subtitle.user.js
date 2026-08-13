@@ -213,19 +213,24 @@
     var sub = state.subs.filter(function (s) { return s.lan === lan; })[0];
     if (!sub) throw new Error('未找到该语言字幕');
     // 下载该语言下的全部片段（长视频可能有多段），并行拉取以缩短总耗时，单段超时放宽到 30s
-    var raws = await Promise.all(sub.urls.map(function (u) { return gx(u, 30000); }));
+    // 用 allSettled 容忍部分片段失败：单段超时/被拦截只丢该段，其余正常合并，不再整段崩溃
+    var results = await Promise.allSettled(sub.urls.map(function (u) { return gx(u, 30000); }));
     var parts = [];
-    for (var i = 0; i < raws.length; i++) {
-      var d;
-      // 接口可能返回非 JSON（如 HTML 错误页/CORS 拦截页），解析前校验并给出明确提示，避免整脚本崩溃
+    var failed = 0;
+    var firstErr = '';
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      if (r.status !== 'fulfilled') { failed++; if (!firstErr) firstErr = String(r.reason); continue; }
       try {
-        d = JSON.parse(raws[i]);
+        parts.push(JSON.parse(r.value));
       } catch (e) {
-        throw new Error('字幕接口返回非 JSON，可能请求被拦截或网络异常：' + e.message);
+        failed++;
+        if (!firstErr) firstErr = '字幕接口返回非 JSON，可能请求被拦截或网络异常：' + e.message;
+        continue;
       }
-      parts.push(d);
     }
-    if (!parts.length) throw new Error('字幕内容为空');
+    if (!parts.length) throw new Error('字幕内容为空（全部片段拉取失败）' + (firstErr ? '：' + firstErr : ''));
+    if (failed > 0) console.warn('[bili-subtitle] ' + failed + '/' + results.length + ' 段字幕拉取失败，已跳过，其余正常');
     var merged = mergeBodies(parts);
     if (!merged.length) throw new Error('字幕内容为空');
     // 完整性自检：末句远早于视频总长，则打标记供 UI 提示
