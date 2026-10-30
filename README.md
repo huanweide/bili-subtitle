@@ -4,6 +4,8 @@
 [![Stars](https://img.shields.io/github/stars/huanweide/bili-subtitle)](https://github.com/huanweide/bili-subtitle/stargazers)
 <!-- /badges -->
 
+> ⚠️ **已停止维护**：本项目不再更新，请改用 [bili-subtitle-universal](https://github.com/huanweide/bili-subtitle-universal)（覆盖 B站 / YouTube / 任意网页，有字幕秒取、没字幕 AI 转写，纯油猴脚本零后端）。
+
 # B站字幕一键提取 · 篡改猴插件（极速版 v6.1）
 
 > 姊妹项目：本插件是「浏览器一键提取」形态（零配置、无需 API Key）。如果你需要**命令行批量下载**，或在**无字幕时用 AI 语音转文字**生成字幕，请用 [bili-subtitle-extractor](https://github.com/huanweide/bili-subtitle-extractor)（纯 Python 命令行版）。
@@ -65,6 +67,14 @@ B站视频页 → 读取 cid → 查字幕列表(API) → 选语言 → 下载�
 - **打开视频没看到按钮？** 确认 Tampermonkey 已启用、脚本已安装且作用于 bilibili.com。
 - **提示无字幕？** 该视频 B站未生成 AI 字幕，也无 UP 主上传的 CC 字幕，确实没有可提取的字幕文本；但你仍可一键复制视频标题与简介留存。
 - **番剧能用吗？** 支持（`/bangumi/play/` 页面同样出现按钮）。
+
+## 迁移到 bili-subtitle-universal
+
+本项目已停止维护。新项目 [bili-subtitle-universal](https://github.com/huanweide/bili-subtitle-universal) 覆盖 **B站 / YouTube / 任意网页**，有字幕秒取、没字幕 AI 转写，仍是纯油猴脚本、零后端。建议新用户直接安装 universal 版。
+
+## 作者
+
+由 [huanweide](https://github.com/huanweide) 维护（本项目已归档停止维护）。
 
 ## 许可证
 
