@@ -7,6 +7,7 @@
 > ⚠️ **已停止维护**：本项目不再更新，请改用 [bili-subtitle-universal](https://github.com/huanweide/bili-subtitle-universal)（覆盖 B站 / YouTube / 任意网页，有字幕秒取、没字幕 AI 转写，纯油猴脚本零后端）。
 
 # B站字幕一键提取 · 篡改猴插件（极速版 v6.1）
+> **English** · [README_EN.md](./README_EN.md)
 
 > 姊妹项目：本插件是「浏览器一键提取」形态（零配置、无需 API Key）。如果你需要**命令行批量下载**，或在**无字幕时用 AI 语音转文字**生成字幕，请用 [bili-subtitle-extractor](https://github.com/huanweide/bili-subtitle-extractor)（纯 Python 命令行版）。
 
